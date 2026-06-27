@@ -115,7 +115,26 @@ function socketHandler(io, socket) {
       io.to(receiverSocketId).emit('user-stop-typing', { conversationId, senderId });
     }
   });
-
+  // Delete message
+  socket.on('delete-message', async (data) => {
+    const { messageId, forEveryone, conversationId } = data;
+    try {
+      if (forEveryone) {
+        const conversation = await Conversation.findById(conversationId);
+        if (conversation) {
+          conversation.participants.forEach((participantId) => {
+            const pId = participantId.toString();
+            const socketId = connectedUsers.get(pId);
+            if (socketId) {
+              io.to(socketId).emit('message-deleted', { messageId });
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Delete message socket error:', error.message);
+    }
+  });
   // User goes offline
   socket.on('disconnect', async () => {
     let disconnectedUserId = null;
