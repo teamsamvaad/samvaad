@@ -4,6 +4,32 @@ import useAuthStore from '../store/useAuthStore';
 import useChatStore from '../store/useChatStore';
 import socket from '../lib/socket';
 
+// Create notification audio once (unlocked on first user tap)
+let notificationAudio = null;
+let audioUnlocked = false;
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  try {
+    notificationAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+    notificationAudio.volume = 0.01;
+    notificationAudio.play().then(() => {
+      audioUnlocked = true;
+      // Now set the real notification sound
+      notificationAudio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2LkYyDfXV2gIeNiYN9dXZ/hI2Jgn10dv+FjYmCfXR2/4WNiYJ9dHb/hY2Jgn10dv+FjYmCfXR2/4SNiYJ9dHb/hI2Jgn10dv+EjYmCfXR2/4ONiYJ9dHb/g42Jgn10dv+DjYmCfXR2/4ONiYJ9dHb/g42Jgn10dv+DjYmCfXR2/4ONiYJ9dHb/g42Jgn10dv+DjYmCfXR2/4ONiYJ9dHb/g42Jgn10dv+DjYmCfXR2/4ONiYJ9dHb/g42Jgn10dg==');
+      notificationAudio.volume = 1;
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+function playNotificationSound() {
+  if (!audioUnlocked || !notificationAudio) return;
+  try {
+    notificationAudio.currentTime = 0;
+    notificationAudio.play().catch(() => {});
+  } catch (e) {}
+}
+
 function Home() {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
@@ -23,24 +49,6 @@ function Home() {
   const [totalUnread, setTotalUnread] = useState(0);
   const pollRef = useRef(null);
 
-  // Play notification sound
-  const playNotificationSound = () => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.4, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
-    } catch (e) {}
-  };
-
-  // Show browser notification
   const showBrowserNotification = (message) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       const senderName = message.sender?.fullName || 'Someone';
@@ -48,11 +56,12 @@ function Home() {
         body: `${senderName}: ${message.text}`,
         icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🗣️</text></svg>',
         tag: message._id,
+        requireInteraction: false,
+        silent: false,
       });
     }
   };
 
-  // Get unread count for a conversation (works with plain object or Map)
   const getUnreadCount = (conversation) => {
     const uc = conversation.unreadCount;
     if (!uc) return 0;
@@ -60,21 +69,18 @@ function Home() {
     return uc[user._id] || 0;
   };
 
-  // Request notification permission on load
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, []);
 
-  // Socket + Polling setup
   useEffect(() => {
     if (user) {
       socket.connect();
       socket.emit('join', user._id);
       getConversations();
 
-      // Poll every 5 seconds as backup
       pollRef.current = setInterval(() => {
         getConversations();
       }, 5000);
@@ -85,7 +91,6 @@ function Home() {
     });
 
     socket.on('new-message', (message) => {
-      const currentConv = useChatStore.getState().currentConversation;
       const isOnChatPage = window.location.hash.includes(message.conversationId);
 
       useChatStore.getState().addIncomingMessage(message);
@@ -95,7 +100,6 @@ function Home() {
         showBrowserNotification(message);
       }
 
-      // Always refresh conversation list
       getConversations();
     });
 
@@ -117,12 +121,10 @@ function Home() {
     };
   }, [user]);
 
-  // Calculate total unread
   useEffect(() => {
     const total = conversations.reduce((sum, conv) => sum + getUnreadCount(conv), 0);
     setTotalUnread(total);
 
-    // Update page title with unread count
     if (total > 0) {
       document.title = `(${total}) Samvaad`;
     } else {
@@ -132,6 +134,7 @@ function Home() {
 
   const handleSearch = (query) => {
     setSearchQuery(query);
+    unlockAudio();
     if (query.trim()) {
       searchUsers(query);
     } else {
@@ -140,6 +143,7 @@ function Home() {
   };
 
   const handleStartChat = async (receiverId) => {
+    unlockAudio();
     const conversation = await startConversation(receiverId);
     if (conversation) {
       navigate(`/chat/${conversation._id}`);
@@ -158,7 +162,7 @@ function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0e1621] flex flex-col">
+    <div className="min-h-screen bg-[#0e1621] flex flex-col" onClick={unlockAudio}>
       {/* Header */}
       <div className="bg-[#17212b] px-4 py-3 flex items-center justify-between border-b border-[#2b5278]">
         <div className="flex items-center gap-3">
@@ -174,7 +178,7 @@ function Home() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowSearch(!showSearch)}
+            onClick={() => { unlockAudio(); setShowSearch(!showSearch); }}
             className="text-[#7a8fa6] hover:text-[#2AABEE] text-xl"
           >
             🔍
@@ -242,7 +246,7 @@ function Home() {
             return (
               <button
                 key={conv._id}
-                onClick={() => navigate(`/chat/${conv._id}`)}
+                onClick={() => { unlockAudio(); navigate(`/chat/${conv._id}`); }}
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#17212b] transition-colors border-b border-[#17212b]"
               >
                 <div className="relative">
