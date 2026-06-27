@@ -21,21 +21,23 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// Search users
+// Search users — EXACT USERNAME MATCH ONLY (privacy)
 router.get('/users/search', authMiddleware, async (req, res) => {
   try {
     const { q } = req.query;
-    if (!q) return res.json([]);
+    if (!q || q.trim().length === 0) return res.json([]);
 
-    const users = await User.find({
-      $or: [
-        { username: { $regex: q, $options: 'i' } },
-        { fullName: { $regex: q, $options: 'i' } },
-      ],
+    // Only find EXACT username match (case-insensitive)
+    const user = await User.findOne({
+      username: q.trim().toLowerCase(),
       _id: { $ne: req.userId },
     }).select('-password');
 
-    res.json(users);
+    if (user) {
+      return res.json([user]);
+    }
+
+    return res.json([]);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -88,13 +90,11 @@ router.get('/messages/:conversationId', authMiddleware, async (req, res) => {
       .populate('sender', '-password')
       .sort({ createdAt: 1 });
 
-    // Mark messages as read
     await Message.updateMany(
       { conversationId: req.params.conversationId, read: false, sender: { $ne: req.userId } },
       { read: true }
     );
 
-    // Reset unread count for this user
     const conversation = await Conversation.findById(req.params.conversationId);
     if (conversation) {
       conversation.unreadCount.set(req.userId.toString(), 0);
@@ -120,13 +120,11 @@ router.post('/messages', authMiddleware, async (req, res) => {
 
     await message.save();
 
-    // Update conversation's last message
     const conversation = await Conversation.findById(conversationId);
     if (conversation) {
       conversation.lastMessage = text;
       conversation.lastMessageAt = Date.now();
 
-      // Increment unread count for all participants except sender
       conversation.participants.forEach((participantId) => {
         const pId = participantId.toString();
         if (pId !== req.userId.toString()) {
