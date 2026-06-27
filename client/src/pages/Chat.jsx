@@ -13,12 +13,14 @@ function Chat() {
   const selectConversation = useChatStore((state) => state.selectConversation);
   const getMessages = useChatStore((state) => state.getMessages);
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const getConversations = useChatStore((state) => state.getConversations);
   const onlineUsers = useChatStore((state) => state.onlineUsers);
   const isTyping = useChatStore((state) => state.isTyping);
 
   const [text, setText] = useState('');
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const pollRef = useRef(null);
 
   useEffect(() => {
     if (conversationId) {
@@ -30,7 +32,16 @@ function Chat() {
         conversationId,
         userId: user._id,
       });
+
+      // Poll messages every 3 seconds as backup
+      pollRef.current = setInterval(() => {
+        getMessages(conversationId);
+      }, 3000);
     }
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, [conversationId]);
 
   useEffect(() => {
@@ -41,12 +52,12 @@ function Chat() {
     socket.on('new-message', (message) => {
       useChatStore.getState().addIncomingMessage(message);
 
-      // If message is for current chat, mark as read
       if (message.conversationId === conversationId) {
         socket.emit('mark-read', {
           conversationId,
           userId: user._id,
         });
+        getConversations();
       }
     });
 
@@ -98,7 +109,7 @@ function Chat() {
     });
 
     setText('');
-    useChatStore.getState().getConversations();
+    getConversations();
   };
 
   const handleTyping = (value) => {
