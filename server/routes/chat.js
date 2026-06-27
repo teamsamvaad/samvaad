@@ -94,6 +94,13 @@ router.get('/messages/:conversationId', authMiddleware, async (req, res) => {
       { read: true }
     );
 
+    // Reset unread count for this user
+    const conversation = await Conversation.findById(req.params.conversationId);
+    if (conversation) {
+      conversation.unreadCount.set(req.userId.toString(), 0);
+      await conversation.save();
+    }
+
     res.json(messages);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -114,10 +121,22 @@ router.post('/messages', authMiddleware, async (req, res) => {
     await message.save();
 
     // Update conversation's last message
-    await Conversation.findByIdAndUpdate(conversationId, {
-      lastMessage: text,
-      lastMessageAt: Date.now(),
-    });
+    const conversation = await Conversation.findById(conversationId);
+    if (conversation) {
+      conversation.lastMessage = text;
+      conversation.lastMessageAt = Date.now();
+
+      // Increment unread count for all participants except sender
+      conversation.participants.forEach((participantId) => {
+        const pId = participantId.toString();
+        if (pId !== req.userId.toString()) {
+          const currentCount = conversation.unreadCount.get(pId) || 0;
+          conversation.unreadCount.set(pId, currentCount + 1);
+        }
+      });
+
+      await conversation.save();
+    }
 
     const populatedMessage = await message.populate('sender', '-password');
 
