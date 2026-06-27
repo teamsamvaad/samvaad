@@ -133,11 +133,14 @@ function Home() {
   return (
     <div className="h-full bg-[#0e1621] flex flex-col relative">
 
-      {/* Menu Overlay */}
+            {/* Menu Overlay */}
       {menuOpen && (
-        <div className="absolute inset-0 z-50 fade-in">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setMenuOpen(false)}></div>
-          <div className="absolute left-0 top-0 bottom-0 w-[280px] bg-[#17212b] slide-up overflow-y-auto">
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => setMenuOpen(false)}
+          ></div>
+          <div className="fixed left-0 top-0 bottom-0 w-[280px] bg-[#17212b] z-50 overflow-y-auto slide-up">
             {/* Menu Header */}
             <div className="bg-[#1c2e3f] p-5">
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#2AABEE] to-[#1d8bc4] flex items-center justify-center text-white font-bold text-xl shadow-lg">
@@ -178,7 +181,7 @@ function Home() {
               <p className="text-[#3a5068] text-[11px]">Samvaad v1.0</p>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Header */}
