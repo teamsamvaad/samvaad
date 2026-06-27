@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useChatStore from '../store/useChatStore';
@@ -20,47 +20,64 @@ function Home() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [totalUnread, setTotalUnread] = useState(0);
+  const pollRef = useRef(null);
 
-  // Notification sound
+  // Play notification sound
   const playNotificationSound = () => {
     try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      oscillator.frequency.value = 800;
-      oscillator.type = 'sine';
-      gainNode.gain.value = 0.3;
-      oscillator.start();
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
-      oscillator.stop(audioContext.currentTime + 0.3);
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
     } catch (e) {}
   };
 
-  // Browser notification
+  // Show browser notification
   const showBrowserNotification = (message) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       const senderName = message.sender?.fullName || 'Someone';
       new Notification('Samvaad 💬', {
         body: `${senderName}: ${message.text}`,
         icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🗣️</text></svg>',
+        tag: message._id,
       });
     }
   };
 
-  // Request notification permission
+  // Get unread count for a conversation (works with plain object or Map)
+  const getUnreadCount = (conversation) => {
+    const uc = conversation.unreadCount;
+    if (!uc) return 0;
+    if (typeof uc.get === 'function') return uc.get(user._id) || 0;
+    return uc[user._id] || 0;
+  };
+
+  // Request notification permission on load
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, []);
 
+  // Socket + Polling setup
   useEffect(() => {
     if (user) {
       socket.connect();
       socket.emit('join', user._id);
       getConversations();
+
+      // Poll every 5 seconds as backup
+      pollRef.current = setInterval(() => {
+        getConversations();
+      }, 5000);
     }
 
     socket.on('online-users', (users) => {
@@ -69,33 +86,49 @@ function Home() {
 
     socket.on('new-message', (message) => {
       const currentConv = useChatStore.getState().currentConversation;
-      const isOnChatPage = currentConv?._id === message.conversationId;
+      const isOnChatPage = window.location.hash.includes(message.conversationId);
 
       useChatStore.getState().addIncomingMessage(message);
 
       if (!isOnChatPage) {
         playNotificationSound();
         showBrowserNotification(message);
-        getConversations();
       }
+
+      // Always refresh conversation list
+      getConversations();
     });
 
     socket.on('conversation-updated', (updatedConv) => {
       updateConversation(updatedConv);
     });
 
-    socket.on('messages-read', ({ conversationId }) => {
-      useChatStore.getState().getMessages(conversationId);
+    socket.on('messages-read', () => {
+      getConversations();
     });
 
     return () => {
-      socket.disconnect();
+      if (pollRef.current) clearInterval(pollRef.current);
       socket.off('online-users');
       socket.off('new-message');
       socket.off('conversation-updated');
       socket.off('messages-read');
+      socket.disconnect();
     };
   }, [user]);
+
+  // Calculate total unread
+  useEffect(() => {
+    const total = conversations.reduce((sum, conv) => sum + getUnreadCount(conv), 0);
+    setTotalUnread(total);
+
+    // Update page title with unread count
+    if (total > 0) {
+      document.title = `(${total}) Samvaad`;
+    } else {
+      document.title = 'Samvaad';
+    }
+  }, [conversations]);
 
   const handleSearch = (query) => {
     setSearchQuery(query);
@@ -121,11 +154,7 @@ function Home() {
   };
 
   const getOtherUser = (conversation) => {
-    return conversation.participants.find((p) => p._id !== user._id);
-  };
-
-  const getUnreadCount = (conversation) => {
-    return conversation.unreadCount?.get?.(user._id) || 0;
+    return conversation.participants?.find((p) => p._id !== user._id);
   };
 
   return (
@@ -170,7 +199,6 @@ function Home() {
             className="w-full px-4 py-2 bg-[#0e1621] border border-[#2b5278] rounded-lg text-white placeholder-[#546778] focus:outline-none focus:border-[#2AABEE] text-sm"
           />
 
-          {/* Search Results */}
           {searchResults.length > 0 && (
             <div className="mt-2 space-y-1">
               {searchResults.map((u) => (
