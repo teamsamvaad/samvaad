@@ -88,7 +88,24 @@ const useChatStore = create((set, get) => ({
       }
       return state;
     });
-    get().getConversations();
+  },
+
+  // Update a conversation in the list
+  updateConversation: (updatedConv) => {
+    set((state) => {
+      const exists = state.conversations.find((c) => c._id === updatedConv._id);
+      let newConversations;
+      if (exists) {
+        newConversations = state.conversations.map((c) =>
+          c._id === updatedConv._id ? updatedConv : c
+        );
+      } else {
+        newConversations = [updatedConv, ...state.conversations];
+      }
+      // Sort by lastMessageAt
+      newConversations.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+      return { conversations: newConversations };
+    });
   },
 
   // Set typing
