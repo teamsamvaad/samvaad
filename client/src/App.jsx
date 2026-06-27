@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { BrowserRouter } from 'react-router-dom';
-import { SpeedInsights } from '@vercel/speed-insights/react';
+import { Routes, Route, Navigate, HashRouter } from 'react-router-dom';
 import useAuthStore from './store/useAuthStore';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Home from './pages/Home';
+import Chat from './pages/Chat';
 
 function App() {
   const { user, checkAuth, isLoading } = useAuthStore();
@@ -23,14 +22,14 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/" element={user ? <Home /> : <Navigate to="/login" />} />
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/signup" element={user ? <Navigate to="/" /> : <Signup />} />
+        <Route path="/chat/:conversationId" element={user ? <Chat /> : <Navigate to="/login" />} />
       </Routes>
-      <SpeedInsights />
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
