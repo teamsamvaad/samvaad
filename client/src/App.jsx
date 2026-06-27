@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { BrowserRouter } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import useAuthStore from './store/useAuthStore';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -28,6 +29,7 @@ function App() {
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/signup" element={user ? <Navigate to="/" /> : <Signup />} />
       </Routes>
+      <Analytics />
     </BrowserRouter>
   );
 }
