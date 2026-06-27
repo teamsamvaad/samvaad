@@ -154,5 +154,38 @@ router.get('/users/online', authMiddleware, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+// Delete a message
+router.delete('/messages/:messageId', authMiddleware, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { forEveryone } = req.body;
 
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    // Only sender can delete for everyone
+    if (forEveryone && message.sender.toString() !== req.userId) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    await Message.findByIdAndDelete(messageId);
+
+    // Update conversation's last message if needed
+    const conversation = await Conversation.findById(message.conversationId);
+    if (conversation && conversation.lastMessage === message.text) {
+      const lastMsg = await Message.findOne({
+        conversationId: message.conversationId,
+      }).sort({ createdAt: -1 });
+      conversation.lastMessage = lastMsg ? lastMsg.text : '';
+      conversation.lastMessageAt = lastMsg ? lastMsg.createdAt : Date.now();
+      await conversation.save();
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 module.exports = router;
