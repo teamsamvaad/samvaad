@@ -124,16 +124,16 @@ function Home() {
 
   const menuItems = [
     { icon: '👤', label: 'My Profile', action: () => { setMenuOpen(false); navigate('/settings/profile'); } },
-    { icon: '💾', label: 'Saved Messages', action: () => { setMenuOpen(false); } },
-    { icon: '👥', label: 'Contacts', action: () => { setMenuOpen(false); } },
-    { icon: '📞', label: 'Calls', action: () => { setMenuOpen(false); } },
+    { icon: '💾', label: 'Saved Messages', action: () => { setMenuOpen(false); navigate('/saved'); } },
+    { icon: '👥', label: 'Contacts', action: () => { setMenuOpen(false); navigate('/contacts'); } },
+    { icon: '📞', label: 'Calls', action: () => { setMenuOpen(false); navigate('/calls'); } },
     { icon: '⚙️', label: 'Settings', action: () => { setMenuOpen(false); navigate('/settings'); } },
   ];
 
   return (
     <div className="h-full bg-[#0e1621] flex flex-col relative">
 
-            {/* Menu Overlay */}
+      {/* Menu Overlay */}
       {menuOpen && (
         <>
           <div
