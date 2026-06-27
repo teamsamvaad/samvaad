@@ -28,15 +28,25 @@ function socketHandler(io, socket) {
 
       await message.save();
 
-      await Conversation.findByIdAndUpdate(conversationId, {
-        lastMessage: text,
-        lastMessageAt: Date.now(),
-      });
+      const conversation = await Conversation.findById(conversationId);
+      if (conversation) {
+        conversation.lastMessage = text;
+        conversation.lastMessageAt = Date.now();
+
+        conversation.participants.forEach((participantId) => {
+          const pId = participantId.toString();
+          if (pId !== senderId.toString()) {
+            const currentCount = conversation.unreadCount.get(pId) || 0;
+            conversation.unreadCount.set(pId, currentCount + 1);
+          }
+        });
+
+        await conversation.save();
+      }
 
       const populatedMessage = await message.populate('sender', '-password');
+      const populatedConversation = await Conversation.findById(conversationId).populate('participants', '-password');
 
-      // Find conversation participants
-      const conversation = await Conversation.findById(conversationId);
       const otherUserId = conversation.participants.find(
         (p) => p.toString() !== senderId
       );
@@ -45,12 +55,39 @@ function socketHandler(io, socket) {
       const receiverSocketId = connectedUsers.get(otherUserId.toString());
       if (receiverSocketId) {
         io.to(receiverSocketId).emit('new-message', populatedMessage);
+        io.to(receiverSocketId).emit('conversation-updated', populatedConversation);
       }
 
       // Send back to sender
       socket.emit('new-message', populatedMessage);
+      socket.emit('conversation-updated', populatedConversation);
     } catch (error) {
       console.error('Socket message error:', error.message);
+    }
+  });
+
+  // Mark messages as read
+  socket.on('mark-read', async (data) => {
+    const { conversationId, userId } = data;
+    try {
+      await Message.updateMany(
+        { conversationId, read: false, sender: { $ne: userId } },
+        { read: true }
+      );
+      const conversation = await Conversation.findById(conversationId);
+      if (conversation) {
+        conversation.unreadCount.set(userId.toString(), 0);
+        await conversation.save();
+      }
+      const otherUserId = conversation.participants.find(
+        (p) => p.toString() !== userId
+      );
+      const receiverSocketId = connectedUsers.get(otherUserId.toString());
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit('messages-read', { conversationId, userId });
+      }
+    } catch (error) {
+      console.error('Mark read error:', error.message);
     }
   });
 
