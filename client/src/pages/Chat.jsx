@@ -15,11 +15,12 @@ function Chat() {
   const sendMessage = useChatStore((state) => state.sendMessage);
   const getConversations = useChatStore((state) => state.getConversations);
   const onlineUsers = useChatStore((state) => state.onlineUsers);
-  const isTyping = useChatStore((state) => state.isTyping);
 
   const [text, setText] = useState('');
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const typingStopTimeoutRef = useRef(null);
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -27,20 +28,22 @@ function Chat() {
       selectConversation({ _id: conversationId });
       getMessages(conversationId);
 
-      // Mark messages as read
       socket.emit('mark-read', {
         conversationId,
         userId: user._id,
       });
 
-      // Poll messages every 3 seconds as backup
       pollRef.current = setInterval(() => {
         getMessages(conversationId);
       }, 3000);
     }
 
+    // Reset typing when switching conversations
+    setIsOtherUserTyping(false);
+
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (typingStopTimeoutRef.current) clearTimeout(typingStopTimeoutRef.current);
     };
   }, [conversationId]);
 
@@ -63,13 +66,18 @@ function Chat() {
 
     socket.on('user-typing', ({ conversationId: convId, senderId }) => {
       if (convId === conversationId && senderId !== user._id) {
-        useChatStore.getState().setTyping(true);
+        setIsOtherUserTyping(true);
+        // Auto-reset typing after 3 seconds if no stop event
+        if (typingStopTimeoutRef.current) clearTimeout(typingStopTimeoutRef.current);
+        typingStopTimeoutRef.current = setTimeout(() => {
+          setIsOtherUserTyping(false);
+        }, 3000);
       }
     });
 
     socket.on('user-stop-typing', ({ conversationId: convId, senderId }) => {
       if (convId === conversationId && senderId !== user._id) {
-        useChatStore.getState().setTyping(false);
+        setIsOtherUserTyping(false);
       }
     });
 
@@ -159,7 +167,7 @@ function Chat() {
         <div>
           <h3 className="text-white font-semibold">{otherUser?.fullName}</h3>
           <p className="text-xs text-[#7a8fa6]">
-            {isTyping
+            {isOtherUserTyping
               ? 'typing...'
               : onlineUsers.includes(otherUser?._id)
               ? 'online'
@@ -212,7 +220,7 @@ function Chat() {
             );
           })
         )}
-        {isTyping && (
+        {isOtherUserTyping && (
           <div className="flex justify-start">
             <div className="bg-[#182533] px-4 py-2 rounded-2xl rounded-bl-sm">
               <div className="flex gap-1">
