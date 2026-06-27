@@ -24,6 +24,12 @@ function Chat() {
     if (conversationId) {
       selectConversation({ _id: conversationId });
       getMessages(conversationId);
+
+      // Mark messages as read
+      socket.emit('mark-read', {
+        conversationId,
+        userId: user._id,
+      });
     }
   }, [conversationId]);
 
@@ -34,6 +40,14 @@ function Chat() {
   useEffect(() => {
     socket.on('new-message', (message) => {
       useChatStore.getState().addIncomingMessage(message);
+
+      // If message is for current chat, mark as read
+      if (message.conversationId === conversationId) {
+        socket.emit('mark-read', {
+          conversationId,
+          userId: user._id,
+        });
+      }
     });
 
     socket.on('user-typing', ({ conversationId: convId, senderId }) => {
@@ -48,10 +62,17 @@ function Chat() {
       }
     });
 
+    socket.on('messages-read', ({ conversationId: convId }) => {
+      if (convId === conversationId) {
+        getMessages(conversationId);
+      }
+    });
+
     return () => {
       socket.off('new-message');
       socket.off('user-typing');
       socket.off('user-stop-typing');
+      socket.off('messages-read');
     };
   }, [conversationId, user]);
 
@@ -158,16 +179,23 @@ function Chat() {
                   }`}
                 >
                   <p className="text-sm break-words">{msg.text}</p>
-                  <p
-                    className={`text-[10px] mt-1 ${
-                      isMe ? 'text-white/60' : 'text-[#546778]'
-                    }`}
-                  >
-                    {new Date(msg.createdAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
+                  <div className="flex items-center justify-end gap-1 mt-1">
+                    <p
+                      className={`text-[10px] ${
+                        isMe ? 'text-white/60' : 'text-[#546778]'
+                      }`}
+                    >
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                    {isMe && (
+                      <span className={`text-[10px] ${msg.read ? 'text-[#2AABEE]' : 'text-white/40'}`}>
+                        ✓✓
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
