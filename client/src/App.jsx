@@ -7,6 +7,9 @@ import Home from './pages/Home';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
 import EditProfile from './pages/EditProfile';
+import SavedMessages from './pages/SavedMessages';
+import Contacts from './pages/Contacts';
+import Calls from './pages/Calls';
 
 function App() {
   const { user, checkAuth, isLoading } = useAuthStore();
@@ -32,6 +35,9 @@ function App() {
         <Route path="/chat/:conversationId" element={user ? <Chat /> : <Navigate to="/login" />} />
         <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" />} />
         <Route path="/settings/profile" element={user ? <EditProfile /> : <Navigate to="/login" />} />
+        <Route path="/saved" element={user ? <SavedMessages /> : <Navigate to="/login" />} />
+        <Route path="/contacts" element={user ? <Contacts /> : <Navigate to="/login" />} />
+        <Route path="/calls" element={user ? <Calls /> : <Navigate to="/login" />} />
       </Routes>
     </HashRouter>
   );
