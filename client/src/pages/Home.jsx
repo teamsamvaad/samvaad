@@ -15,10 +15,46 @@ function Home() {
   const searchUsers = useChatStore((state) => state.searchUsers);
   const clearSearch = useChatStore((state) => state.clearSearch);
   const startConversation = useChatStore((state) => state.startConversation);
+  const updateConversation = useChatStore((state) => state.updateConversation);
   const onlineUsers = useChatStore((state) => state.onlineUsers);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+
+  // Notification sound
+  const playNotificationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.3;
+      oscillator.start();
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (e) {}
+  };
+
+  // Browser notification
+  const showBrowserNotification = (message) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const senderName = message.sender?.fullName || 'Someone';
+      new Notification('Samvaad 💬', {
+        body: `${senderName}: ${message.text}`,
+        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🗣️</text></svg>',
+      });
+    }
+  };
+
+  // Request notification permission
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -32,11 +68,32 @@ function Home() {
     });
 
     socket.on('new-message', (message) => {
+      const currentConv = useChatStore.getState().currentConversation;
+      const isOnChatPage = currentConv?._id === message.conversationId;
+
       useChatStore.getState().addIncomingMessage(message);
+
+      if (!isOnChatPage) {
+        playNotificationSound();
+        showBrowserNotification(message);
+        getConversations();
+      }
+    });
+
+    socket.on('conversation-updated', (updatedConv) => {
+      updateConversation(updatedConv);
+    });
+
+    socket.on('messages-read', ({ conversationId }) => {
+      useChatStore.getState().getMessages(conversationId);
     });
 
     return () => {
       socket.disconnect();
+      socket.off('online-users');
+      socket.off('new-message');
+      socket.off('conversation-updated');
+      socket.off('messages-read');
     };
   }, [user]);
 
@@ -65,6 +122,10 @@ function Home() {
 
   const getOtherUser = (conversation) => {
     return conversation.participants.find((p) => p._id !== user._id);
+  };
+
+  const getUnreadCount = (conversation) => {
+    return conversation.unreadCount?.get?.(user._id) || 0;
   };
 
   return (
@@ -149,6 +210,7 @@ function Home() {
           conversations.map((conv) => {
             const otherUser = getOtherUser(conv);
             if (!otherUser) return null;
+            const unread = getUnreadCount(conv);
             return (
               <button
                 key={conv._id}
@@ -165,14 +227,23 @@ function Home() {
                 </div>
                 <div className="flex-1 text-left min-w-0">
                   <div className="flex justify-between items-center">
-                    <p className="text-white font-medium">{otherUser.fullName}</p>
-                    <span className="text-[#546778] text-xs">
+                    <p className={`font-medium ${unread > 0 ? 'text-white' : 'text-[#c4c9ce]'}`}>
+                      {otherUser.fullName}
+                    </p>
+                    <span className={`text-xs ${unread > 0 ? 'text-[#2AABEE]' : 'text-[#546778]'}`}>
                       {new Date(conv.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-[#7a8fa6] text-sm truncate">
-                    {conv.lastMessage || 'No messages yet'}
-                  </p>
+                  <div className="flex justify-between items-center">
+                    <p className={`text-sm truncate flex-1 ${unread > 0 ? 'text-white font-medium' : 'text-[#7a8fa6]'}`}>
+                      {conv.lastMessage || 'No messages yet'}
+                    </p>
+                    {unread > 0 && (
+                      <span className="ml-2 min-w-[20px] h-5 bg-[#2AABEE] rounded-full flex items-center justify-center text-white text-xs font-bold px-1.5">
+                        {unread > 99 ? '99+' : unread}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </button>
             );
