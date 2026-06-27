@@ -13,6 +13,11 @@ const conversationSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  unreadCount: {
+    type: Map,
+    of: Number,
+    default: {},
+  },
 }, {
   timestamps: true,
 });
