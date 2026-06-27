@@ -4,7 +4,6 @@ import useAuthStore from '../store/useAuthStore';
 import useChatStore from '../store/useChatStore';
 import socket from '../lib/socket';
 
-// Create notification audio once (unlocked on first user tap)
 let notificationAudio = null;
 let audioUnlocked = false;
 
@@ -15,9 +14,6 @@ function unlockAudio() {
     notificationAudio.volume = 0.01;
     notificationAudio.play().then(() => {
       audioUnlocked = true;
-      // Now set the real notification sound
-      notificationAudio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2LkYyDfXV2gIeNiYN9dXZ/hI2Jgn10dv+FjYmCfXR2/4WNiYJ9dHb/hY2Jgn10dv+FjYmCfXR2/4SNiYJ9dHb/hI2Jgn10dv+EjYmCfXR2/4ONiYJ9dHb/g42Jgn10dv+DjYmCfXR2/4ONiYJ9dHb/g42Jgn10dv+DjYmCfXR2/4ONiYJ9dHb/g42Jgn10dv+DjYmCfXR2/4ONiYJ9dHb/g42Jgn10dv+DjYmCfXR2/4ONiYJ9dHb/g42Jgn10dg==');
-      notificationAudio.volume = 1;
     }).catch(() => {});
   } catch (e) {}
 }
@@ -47,6 +43,7 @@ function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [totalUnread, setTotalUnread] = useState(0);
+  const [searchStatus, setSearchStatus] = useState('');
   const pollRef = useRef(null);
 
   const showBrowserNotification = (message) => {
@@ -56,8 +53,6 @@ function Home() {
         body: `${senderName}: ${message.text}`,
         icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🗣️</text></svg>',
         tag: message._id,
-        requireInteraction: false,
-        silent: false,
       });
     }
   };
@@ -132,13 +127,20 @@ function Home() {
     }
   }, [conversations]);
 
-  const handleSearch = (query) => {
+  const handleSearch = async (query) => {
     setSearchQuery(query);
-    unlockAudio();
     if (query.trim()) {
-      searchUsers(query);
+      setSearchStatus('searching');
+      await searchUsers(query);
+      const results = useChatStore.getState().searchResults;
+      if (results.length > 0) {
+        setSearchStatus('found');
+      } else {
+        setSearchStatus('notfound');
+      }
     } else {
       clearSearch();
+      setSearchStatus('');
     }
   };
 
@@ -150,6 +152,7 @@ function Home() {
     }
     setSearchQuery('');
     setShowSearch(false);
+    setSearchStatus('');
   };
 
   const handleLogout = () => {
@@ -178,7 +181,7 @@ function Home() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { unlockAudio(); setShowSearch(!showSearch); }}
+            onClick={() => { unlockAudio(); setShowSearch(!showSearch); setSearchStatus(''); }}
             className="text-[#7a8fa6] hover:text-[#2AABEE] text-xl"
           >
             🔍
@@ -197,12 +200,21 @@ function Home() {
         <div className="bg-[#17212b] px-4 py-3 border-b border-[#2b5278]">
           <input
             type="text"
-            placeholder="Search users by name or username..."
+            placeholder="Enter exact username to find..."
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             className="w-full px-4 py-2 bg-[#0e1621] border border-[#2b5278] rounded-lg text-white placeholder-[#546778] focus:outline-none focus:border-[#2AABEE] text-sm"
           />
 
+          {/* Search Status */}
+          {searchStatus === 'notfound' && (
+            <p className="text-red-400 text-xs mt-2">No user found with this username</p>
+          )}
+          {searchStatus === 'found' && (
+            <p className="text-green-400 text-xs mt-2">User found! Tap to start chat.</p>
+          )}
+
+          {/* Search Results */}
           {searchResults.length > 0 && (
             <div className="mt-2 space-y-1">
               {searchResults.map((u) => (
@@ -235,7 +247,7 @@ function Home() {
             <div className="text-5xl mb-4">🗣️</div>
             <p className="text-[#7a8fa6] text-lg mb-2">No chats yet</p>
             <p className="text-[#546778] text-sm">
-              Tap 🔍 to search for users and start chatting!
+              Tap 🔍 and enter exact username to start chatting!
             </p>
           </div>
         ) : (
